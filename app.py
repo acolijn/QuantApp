@@ -182,13 +182,13 @@ with tab_animate:
         if init_mode_key == "Gaussian wavepacket":
             qs.set_gaussian_wavepacket(x0=x0_v, sigma=sigma_v, k0=k0_v)
         elif init_mode_key == "Energy eigenstate":
-            _, _eigs = create_system_and_eigenstates(potential_name, _x_min, _x_max, _N, n_eigen=16)
+            _, _, _, _eigs = create_system_and_eigenstates(potential_name, _x_min, _x_max, _N, n_eigen=16)
             if _eigs.size > 0 and eigen_n_v < _eigs.shape[1]:
                 qs.psi = _eigs[:, eigen_n_v].astype(complex).copy()
             else:
                 qs.set_gaussian_wavepacket(x0=0, sigma=1.0, k0=0)
         elif init_mode_key == "Superposition":
-            _, _eigs = create_system_and_eigenstates(potential_name, _x_min, _x_max, _N, n_eigen=16)
+            _, _, _, _eigs = create_system_and_eigenstates(potential_name, _x_min, _x_max, _N, n_eigen=16)
             if _eigs.size > 0 and max(n1_v, n2_v) < _eigs.shape[1]:
                 c1, c2 = np.sqrt(ratio_v), np.sqrt(1 - ratio_v)
                 qs.psi = (c1 * _eigs[:, n1_v] + c2 * _eigs[:, n2_v]).astype(complex)
