@@ -311,7 +311,7 @@ with tab_animate:
                     args=[[str(i)], dict(frame=dict(duration=0, redraw=False),
                                          mode="immediate",
                                          transition=dict(duration=0))],
-                    label=f"{times[i]:.1f}" if i % max(1, len(times) // 10) == 0 else "",
+                    label=f"{times[i]:.2f}",
                     method="animate",
                 ))
 
