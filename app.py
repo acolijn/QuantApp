@@ -82,6 +82,16 @@ steps_per_frame = st.sidebar.slider("Steps per frame", 1, 20, 5,
 max_time = st.sidebar.slider("Max time", 1.0, 100.0, 30.0, 1.0)
 speed = st.sidebar.slider("Animation speed (ms/frame)", 10, 200, 50, 10)
 
+# Compute number of frames from max_time (cap at 500 to keep browser responsive)
+time_per_frame = steps_per_frame * dt
+n_frames = max(1, int(max_time / time_per_frame))
+if n_frames > 500:
+    # Increase steps_per_frame to stay within 500 frames
+    steps_per_frame = max(1, int(max_time / (500 * dt)))
+    time_per_frame = steps_per_frame * dt
+    n_frames = max(1, int(max_time / time_per_frame))
+st.sidebar.caption(f"{n_frames} frames, Δt/frame = {time_per_frame:.3f}, total = {n_frames * time_per_frame:.1f}")
+
 st.sidebar.header("📊 Display")
 show_components = st.sidebar.checkbox("Show Re(ψ) and Im(ψ)", value=False)
 show_potential = st.sidebar.checkbox("Show potential V(x)", value=True)
@@ -142,8 +152,6 @@ with tab_animate:
 
     with col_ctrl:
         compute_btn = st.button("▶️ Compute & Play", use_container_width=True, type="primary")
-        n_frames = st.slider("Number of frames", 50, 600, 200, 10,
-                              help="More frames = longer computation but smoother result")
         st.markdown("---")
         info_box = st.empty()
 
@@ -245,7 +253,9 @@ with tab_animate:
         plot_placeholder = st.empty()
 
         if compute_btn:
-            with st.spinner("Pre-computing time evolution..."):
+            # Clear cache to ensure fresh computation with current parameters
+            precompute_animation.clear()
+            with st.spinner(f"Pre-computing {n_frames} frames (t=0 → {n_frames * steps_per_frame * dt:.1f})..."):
                 (probs, re_parts, im_parts, times, energies,
                  exp_xs, delta_xs, norms_arr) = precompute_animation(
                     potential_name, init_mode, _x0, _sigma, _k0,
@@ -256,15 +266,41 @@ with tab_animate:
 
             # ── Build Plotly figure with native animation frames ──
             # Initial data traces
-            traces = [
-                go.Scatter(
-                    x=x_anim, y=probs[0], mode='lines',
-                    name='|ψ(x)|²',
-                    line=dict(color='#2196F3', width=2.5),
-                    fill='tozeroy', fillcolor='rgba(33,150,243,0.15)',
-                ),
-            ]
-            trace_count = 1
+            if show_components:
+                # Show ±|ψ| envelope with Re(ψ) and Im(ψ) inside
+                env0 = np.sqrt(probs[0])
+                traces = [
+                    go.Scatter(
+                        x=x_anim, y=env0, mode='lines',
+                        name='|ψ|',
+                        line=dict(color='#2196F3', width=2, dash='dot'),
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=-env0, mode='lines',
+                        name='-|ψ|',
+                        line=dict(color='#2196F3', width=2, dash='dot'),
+                        showlegend=False,
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=re_parts[0], mode='lines',
+                        name='Re(ψ)', line=dict(color='#4CAF50', width=1.5),
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=im_parts[0], mode='lines',
+                        name='Im(ψ)', line=dict(color='#FF9800', width=1.5),
+                    ),
+                ]
+                trace_count = 4
+            else:
+                traces = [
+                    go.Scatter(
+                        x=x_anim, y=probs[0], mode='lines',
+                        name='|ψ(x)|²',
+                        line=dict(color='#2196F3', width=2.5),
+                        fill='tozeroy', fillcolor='rgba(33,150,243,0.15)',
+                    ),
+                ]
+                trace_count = 1
 
             if show_potential:
                 traces.append(go.Scatter(
@@ -274,29 +310,23 @@ with tab_animate:
                 ))
                 trace_count += 1
 
-            if show_components:
-                traces.append(go.Scatter(
-                    x=x_anim, y=re_parts[0], mode='lines',
-                    name='Re(ψ)', line=dict(color='#4CAF50', width=1.5),
-                ))
-                traces.append(go.Scatter(
-                    x=x_anim, y=im_parts[0], mode='lines',
-                    name='Im(ψ)', line=dict(color='#FF9800', width=1.5),
-                ))
-                trace_count += 2
-
             # Build animation frames
             plotly_frames = []
             slider_steps = []
             for i in range(len(times)):
-                frame_data = [go.Scatter(y=probs[i])]  # Update |ψ|²
+                if show_components:
+                    env_i = np.sqrt(probs[i])
+                    frame_data = [
+                        go.Scatter(y=env_i),
+                        go.Scatter(y=-env_i),
+                        go.Scatter(y=re_parts[i]),
+                        go.Scatter(y=im_parts[i]),
+                    ]
+                else:
+                    frame_data = [go.Scatter(y=probs[i])]
 
                 if show_potential:
                     frame_data.append(go.Scatter(y=V_scaled))  # Potential doesn't change
-
-                if show_components:
-                    frame_data.append(go.Scatter(y=re_parts[i]))
-                    frame_data.append(go.Scatter(y=im_parts[i]))
 
                 plotly_frames.append(go.Frame(
                     data=frame_data,
@@ -318,14 +348,19 @@ with tab_animate:
             # Assemble the animated figure
             fig = go.Figure(data=traces, frames=plotly_frames)
 
-            y_range_main = [0, y_max_prob]
-            y_range_comp = [-np.sqrt(y_max_prob), np.sqrt(y_max_prob)]
+            if show_components:
+                amp_max = np.sqrt(y_max_prob)
+                y_range = [-amp_max, max(amp_max, y_max_prob)]
+                y_title = "ψ(x) / |ψ(x)|²"
+            else:
+                y_range = [0, y_max_prob]
+                y_title = "|ψ(x)|²"
 
             fig.update_layout(
                 template="plotly_white",
-                height=500 if not show_components else 500,
+                height=500,
                 xaxis=dict(title="x", range=[x_min, x_max]),
-                yaxis=dict(range=y_range_main, title="|ψ(x)|²"),
+                yaxis=dict(range=y_range, title=y_title),
                 title=f"|ψ(x)|²   —   t = {times[0]:.3f}    ⟨E⟩ = {energies[0]:.3f}    ⟨x⟩ = {exp_xs[0]:.3f}    Δx = {delta_xs[0]:.3f}",
                 margin=dict(l=50, r=20, t=80, b=120),
                 legend=dict(orientation="h", y=1.12),
@@ -388,35 +423,54 @@ with tab_animate:
             E0 = qs0.expectation_energy()
             prob0 = np.abs(qs0.psi[::stride]) ** 2
 
-            fig0_traces = [
-                go.Scatter(
-                    x=x_anim, y=prob0, mode='lines',
-                    name='|ψ(x)|²',
-                    line=dict(color='#2196F3', width=2.5),
-                    fill='tozeroy', fillcolor='rgba(33,150,243,0.15)',
-                ),
-            ]
+            if show_components:
+                env0 = np.abs(qs0.psi[::stride])
+                fig0_traces = [
+                    go.Scatter(
+                        x=x_anim, y=env0, mode='lines',
+                        name='|ψ|',
+                        line=dict(color='#2196F3', width=2, dash='dot'),
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=-env0, mode='lines',
+                        name='-|ψ|',
+                        line=dict(color='#2196F3', width=2, dash='dot'),
+                        showlegend=False,
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=np.real(qs0.psi[::stride]), mode='lines',
+                        name='Re(ψ)', line=dict(color='#4CAF50', width=1.5),
+                    ),
+                    go.Scatter(
+                        x=x_anim, y=np.imag(qs0.psi[::stride]), mode='lines',
+                        name='Im(ψ)', line=dict(color='#FF9800', width=1.5),
+                    ),
+                ]
+            else:
+                fig0_traces = [
+                    go.Scatter(
+                        x=x_anim, y=prob0, mode='lines',
+                        name='|ψ(x)|²',
+                        line=dict(color='#2196F3', width=2.5),
+                        fill='tozeroy', fillcolor='rgba(33,150,243,0.15)',
+                    ),
+                ]
             if show_potential:
                 fig0_traces.append(go.Scatter(
                     x=x_anim, y=V_scaled, mode='lines',
                     name='V(x) (scaled)',
                     line=dict(color='rgba(255,87,34,0.5)', width=1.5, dash='dash'),
                 ))
-            if show_components:
-                fig0_traces.append(go.Scatter(
-                    x=x_anim, y=np.real(qs0.psi[::stride]), mode='lines',
-                    name='Re(ψ)', line=dict(color='#4CAF50', width=1.5),
-                ))
-                fig0_traces.append(go.Scatter(
-                    x=x_anim, y=np.imag(qs0.psi[::stride]), mode='lines',
-                    name='Im(ψ)', line=dict(color='#FF9800', width=1.5),
-                ))
 
             fig0 = go.Figure(data=fig0_traces)
             fig0.update_layout(
                 template="plotly_white", height=500,
                 xaxis=dict(title="x", range=[x_min, x_max]),
-                yaxis=dict(range=[0, y_max_prob], title="|ψ(x)|²"),
+                yaxis=dict(
+                    range=([-np.sqrt(y_max_prob), max(np.sqrt(y_max_prob), y_max_prob)] if show_components
+                           else [0, y_max_prob]),
+                    title="ψ(x) / |ψ(x)|²" if show_components else "|ψ(x)|²",
+                ),
                 title=f"|ψ(x)|²   —   t = 0.000    ⟨E⟩ = {E0:.3f}",
                 margin=dict(l=50, r=20, t=50, b=50),
                 legend=dict(orientation="h", y=1.12),
