@@ -2,5 +2,5 @@ services:
   quantapp:
     build: .
     ports:
-      - "8501:8501"
+      - "127.0.0.1:8501:8501"
     restart: unless-stopped
