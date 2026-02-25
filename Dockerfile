@@ -11,7 +11,8 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app.py quantum_solver.py ./
+COPY app.py ./
+COPY quantapp/ quantapp/
 
 # Streamlit config: disable telemetry, set server options
 RUN mkdir -p /root/.streamlit
