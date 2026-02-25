@@ -58,6 +58,31 @@ walls, naturally enforcing Dirichlet boundary conditions $\psi = 0$.
 This eliminates leakage entirely and conserves both **norm** and **energy** to
 machine precision — no artificial renormalization needed.
 
+### Absorbing boundaries
+
+For scattering potentials (barrier, step, free particle), the wavepacket can
+travel toward the edges of the simulation grid. With the FFT's periodic
+boundaries, the wavepacket would "wrap around" to the other side, creating
+artificial high-$k$ modes whose energy grows as $k_\\text{max}^2 \\propto 1/\\Delta x^2$.
+This makes the simulation **catastrophically N-dependent**: the same physics
+gives different energies at different grid resolutions.
+
+We solve this with a **complex absorbing potential (CAP)** — a smooth imaginary
+potential $V_\\text{absorb} = -iW(x)$ that ramps up near the grid boundaries
+via a $\\sin^2$ profile. Outgoing waves are gently absorbed before they can
+wrap, giving **N-independent results** at any grid resolution.
+
+Since probability is physically leaving the simulation domain, the norm $\\langle\\psi|\\psi\\rangle$
+may decrease over time for scattering setups. Energy is reported as the
+per-particle value $\\langle E \\rangle / \\langle\\psi|\\psi\\rangle$.
+
+### Smooth potential edges
+
+Discontinuous potentials (e.g. square barrier, step) cause the Trotter splitting
+error to diverge because the commutator $[T, V]$ involves $\\nabla V$, which is
+infinite at a sharp edge. We replace them with smooth $\\tanh$ edges with a
+transition width of $\\sim$0.4 length units, reducing energy drift to $< 10^{-4}$.
+
 ---
 
 ### Physics demonstrations

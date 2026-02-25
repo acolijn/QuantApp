@@ -26,7 +26,8 @@ from scipy.linalg import eigh_tridiagonal
 class QuantumSystem:
     """A 1D quantum system with configurable potential."""
 
-    def __init__(self, x_min=-15.0, x_max=15.0, N=1024, mass=1.0, hbar=1.0):
+    def __init__(self, x_min=-15.0, x_max=15.0, N=1024, mass=1.0, hbar=1.0,
+                 absorb_width=0.05, absorb_strength=0.0):
         self.hbar = hbar
         self.mass = mass
         self.N = N
@@ -46,7 +47,57 @@ class QuantumSystem:
         self.V = np.zeros(N)
         self.time = 0.0
 
+        # Absorbing boundary (complex absorbing potential, CAP)
+        self._absorbing_potential = self._build_absorbing_potential(
+            absorb_width, absorb_strength,
+        )
+
     # ── Potential setup ────────────────────────────────────────────────
+
+    def _build_absorbing_potential(self, width_frac=0.08, strength=5.0):
+        """Build a smooth absorbing potential near the grid boundaries.
+
+        Adds V_absorb = -iW(x) near the edges, where W(x) ramps from 0
+        to *strength* over *width_frac* of the grid on each side using a
+        sin² profile.  This damps outgoing waves and prevents the
+        catastrophic aliasing that occurs when a wavepacket wraps around
+        through the FFT's periodic boundaries.
+
+        Parameters
+        ----------
+        width_frac : float
+            Fraction of the total grid length used for each absorbing
+            layer (default 0.08 = 8% on each side).
+        strength : float
+            Peak absorption rate in inverse time units (default 5.0).
+            A wave at the boundary is damped by exp(-strength·dt) per
+            time step.  With dt=0.01 and 3000 steps (t=30), the
+            boundary damping is exp(-5·30) ≈ 10⁻⁶⁵.
+        """
+        if strength <= 0 or width_frac <= 0:
+            return np.zeros(self.N)
+
+        d = width_frac * self.L
+        W = np.zeros(self.N)
+
+        x_min = self.x[0]
+        x_max = x_min + self.L  # note: x[-1] = x_max - dx
+
+        # Left absorber: ramps from strength at x_min to 0 at x_min + d
+        left = self.x < x_min + d
+        if np.any(left):
+            W[left] = strength * np.sin(
+                np.pi / 2 * (x_min + d - self.x[left]) / d
+            ) ** 2
+
+        # Right absorber: ramps from 0 at x_max - d to strength at x_max
+        right = self.x > x_max - d
+        if np.any(right):
+            W[right] = strength * np.sin(
+                np.pi / 2 * (self.x[right] - (x_max - d)) / d
+            ) ** 2
+
+        return W
 
     def set_potential(self, potential_func):
         """Set the potential V(x)."""
@@ -188,16 +239,26 @@ class QuantumSystem:
         self.time += dt
 
     def _step_fft(self, dt):
-        """Split-operator FFT step (for open / periodic systems)."""
-        V_eff = np.clip(self.V, -1e4, 1e4)
+        """Split-operator FFT step (for open / periodic systems).
 
-        self.psi *= np.exp(-1j * V_eff * dt / (2 * self.hbar))
+        Incorporates the complex absorbing potential (CAP) near the grid
+        boundaries to prevent aliasing from the FFT's periodic wrap-around.
+        The CAP adds V → V − iW(x) near the edges, so the potential
+        half-step becomes:
+
+            exp(-i(V − iW)dt/2ħ) = exp(-iV dt/2ħ) · exp(-W dt/2ħ)
+        """
+        V_eff = np.clip(self.V, -1e4, 1e4)
+        half_V = np.exp(-1j * V_eff * dt / (2 * self.hbar))
+        half_absorb = np.exp(-self._absorbing_potential * dt / (2 * self.hbar))
+
+        self.psi *= half_V * half_absorb
 
         psi_k = np.fft.fft(self.psi)
         psi_k *= np.exp(-1j * self.kinetic_energy_k * dt / self.hbar)
         self.psi = np.fft.ifft(psi_k)
 
-        self.psi *= np.exp(-1j * V_eff * dt / (2 * self.hbar))
+        self.psi *= half_V * half_absorb
 
         # For hard walls without a contiguous interior (no DST),
         # apply the mask but do NOT renormalise — renormalisation
@@ -271,16 +332,21 @@ class QuantumSystem:
         return np.real(-1j * self.hbar * np.sum(np.conj(psi_int) * dpsi) * self.dx)
 
     def expectation_energy(self):
-        """⟨E⟩ = ⟨T⟩ + ⟨V⟩.
+        """⟨E⟩ = ⟨ψ|H|ψ⟩ / ⟨ψ|ψ⟩  (per-particle energy).
 
         Uses the DST basis for ⟨T⟩ when hard walls are present,
         avoiding Gibbs artifacts from the FFT at wall boundaries.
+        Normalising by the current norm ensures that probability
+        absorbed by the boundary layer doesn't register as energy loss.
         """
         if getattr(self, '_use_dst', False):
             return self._expectation_energy_dst()
         psi_k = np.fft.fft(self.psi) * self.dx
         T = np.real(np.sum(np.conj(psi_k) * self.kinetic_energy_k * psi_k) * self.dk / (2 * np.pi))
         V = np.real(np.sum(np.conj(self.psi) * self.V * self.psi) * self.dx)
+        n = self.norm()
+        if n > 1e-10:
+            return (T + V) / n
         return T + V
 
     def _expectation_energy_dst(self):

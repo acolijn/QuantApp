@@ -95,7 +95,7 @@ POTENTIALS = {
     "Free particle": {
         "func": free_particle,
         "description": "V(x) = 0 — Free propagation, wavepacket spreading",
-        "x_range": (-20, 20),
+        "x_range": (-40, 40),
         "default_x0": -5.0,
         "default_k0": 3.0,
         "default_sigma": 1.5,
@@ -135,7 +135,7 @@ POTENTIALS = {
     "Potential barrier (tunneling)": {
         "func": lambda x: potential_barrier(x, width=1.0, height=20.0),
         "description": "Rectangular barrier — quantum tunneling (smooth edges)",
-        "x_range": (-25, 25),
+        "x_range": (-50, 50),
         "default_x0": -5.0,
         "default_k0": 4.0,
         "default_sigma": 1.0,
