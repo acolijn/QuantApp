@@ -119,6 +119,7 @@ POTENTIALS = {
         "default_x0": -5.0,
         "default_k0": 3.0,
         "default_sigma": 1.5,
+        "periodic": True,
     },
     "Infinite square well": {
         "func": lambda x: infinite_square_well(x, width=10.0),
@@ -135,6 +136,7 @@ POTENTIALS = {
         "default_x0": 0.0,
         "default_k0": 0.0,
         "default_sigma": 1.0,
+        "periodic": True,
     },
     "Harmonic oscillator": {
         "func": lambda x: harmonic_oscillator(x, omega=1.0),
@@ -160,6 +162,7 @@ POTENTIALS = {
         "default_x0": -5.0,
         "default_k0": 4.0,
         "default_sigma": 1.0,
+        "periodic": True,
     },
     "Morse potential": {
         "func": lambda x: morse_potential(x, D=12.0, a=0.4, x0=-3.0),
@@ -168,6 +171,7 @@ POTENTIALS = {
         "default_x0": -3.0,
         "default_k0": 0.0,
         "default_sigma": 0.8,
+        "periodic": True,
     },
     "Step potential": {
         "func": lambda x: step_potential(x, height=15.0),
@@ -176,6 +180,7 @@ POTENTIALS = {
         "default_x0": -8.0,
         "default_k0": 4.0,
         "default_sigma": 1.5,
+        "periodic": True,
     },
     "Periodic lattice": {
         "func": lambda x: periodic_potential(x, depth=5.0, period=3.0),
