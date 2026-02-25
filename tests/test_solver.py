@@ -4,7 +4,10 @@ import numpy as np
 import pytest
 
 from quantapp.solver import QuantumSystem
-from quantapp.potentials import infinite_square_well
+from quantapp.potentials import (
+    infinite_square_well, finite_square_well,
+    potential_barrier, step_potential,
+)
 
 
 class TestQuantumSystemBasics:
@@ -115,4 +118,29 @@ class TestDSTPropagator:
         E_final = qs.expectation_energy()
         assert abs(E_final - E0) / abs(E0) < 1e-3, (
             f"Energy drifted over long run: {E0:.6f} → {E_final:.6f}"
+        )
+
+
+class TestSmoothedPotentialEnergy:
+    """Verify energy conservation for potentials with smooth edges."""
+
+    @pytest.mark.parametrize("name,pot_func,xr,x0,sigma,k0", [
+        ("finite_well", lambda x: finite_square_well(x, width=6.0, depth=50.0),
+         (-15, 15), 0.0, 1.0, 0.0),
+        ("barrier", lambda x: potential_barrier(x, width=1.0, height=20.0),
+         (-15, 15), -5.0, 1.0, 4.0),
+        ("step", lambda x: step_potential(x, height=15.0),
+         (-50, 50), -8.0, 1.5, 4.0),
+    ])
+    def test_energy_conserved(self, name, pot_func, xr, x0, sigma, k0):
+        """⟨E⟩ should be conserved with smooth potential edges."""
+        qs = QuantumSystem(x_min=xr[0], x_max=xr[1], N=1024)
+        qs.set_potential(pot_func)
+        qs.set_gaussian_wavepacket(x0=x0, sigma=sigma, k0=k0)
+        E0 = qs.expectation_energy()
+        qs.evolve(total_time=10.0, dt=0.01)
+        E_final = qs.expectation_energy()
+        assert abs(E_final - E0) / abs(E0) < 1e-3, (
+            f"{name}: Energy drifted {E0:.4f} → {E_final:.4f} "
+            f"(relative: {abs(E_final - E0) / abs(E0):.2e})"
         )

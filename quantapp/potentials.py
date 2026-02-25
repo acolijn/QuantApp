@@ -8,6 +8,27 @@ To add a new potential, define the function and add an entry to POTENTIALS.
 import numpy as np
 
 
+# ── Smooth step helper ─────────────────────────────────────────────────
+
+def smooth_step(x, x_edge, steepness):
+    """Smooth step from 0 to 1 at x = x_edge.
+
+    Uses tanh with the given steepness (1/transition_width).
+    The transition spans roughly ±2/steepness around x_edge.
+    """
+    return 0.5 * (1.0 + np.tanh(steepness * (x - x_edge)))
+
+
+def smooth_rect(x, center, half_width, steepness):
+    """Smooth rectangular window: ~1 inside [center-hw, center+hw], ~0 outside."""
+    return smooth_step(x, center - half_width, steepness) * (1.0 - smooth_step(x, center + half_width, steepness))
+
+
+# Default edge steepness — sharp enough to be physical, smooth enough
+# for the split-operator method.  Transition width ~ 2/steepness ≈ 0.4.
+DEFAULT_STEEPNESS = 5.0
+
+
 # ── Potential functions ────────────────────────────────────────────────
 
 def free_particle(x):
@@ -22,11 +43,12 @@ def infinite_square_well(x, width=10.0):
     return V
 
 
-def finite_square_well(x, width=6.0, depth=50.0):
-    """Finite square well: V = -depth inside, 0 outside."""
-    V = np.zeros_like(x)
-    V[np.abs(x) <= width / 2] = -depth
-    return V
+def finite_square_well(x, width=6.0, depth=50.0, steepness=DEFAULT_STEEPNESS):
+    """Finite square well: V ≈ -depth inside, 0 outside.
+
+    Uses smooth tanh edges for numerical stability.
+    """
+    return -depth * smooth_rect(x, 0.0, width / 2, steepness)
 
 
 def harmonic_oscillator(x, omega=1.0, mass=1.0):
@@ -40,11 +62,12 @@ def double_well(x, separation=3.0, depth=8.0):
                      + np.exp(-((x + separation / 2) ** 2)))
 
 
-def potential_barrier(x, width=1.0, height=20.0):
-    """Rectangular barrier for tunneling demonstrations."""
-    V = np.zeros_like(x)
-    V[np.abs(x) < width / 2] = height
-    return V
+def potential_barrier(x, width=1.0, height=20.0, steepness=DEFAULT_STEEPNESS):
+    """Rectangular barrier for tunneling demonstrations.
+
+    Uses smooth tanh edges for numerical stability.
+    """
+    return height * smooth_rect(x, 0.0, width / 2, steepness)
 
 
 def asymmetric_double_well(x, offset=2.0):
@@ -57,11 +80,12 @@ def morse_potential(x, D=10.0, a=0.5, x0=0.0):
     return D * (1 - np.exp(-a * (x - x0))) ** 2
 
 
-def step_potential(x, height=15.0):
-    """Step potential: V = height for x > 0."""
-    V = np.zeros_like(x)
-    V[x > 0] = height
-    return V
+def step_potential(x, height=15.0, steepness=DEFAULT_STEEPNESS):
+    """Step potential: V ≈ height for x > 0.
+
+    Uses smooth tanh edge for numerical stability.
+    """
+    return height * smooth_step(x, 0.0, steepness)
 
 
 # ── Registry ───────────────────────────────────────────────────────────
@@ -86,7 +110,7 @@ POTENTIALS = {
     },
     "Finite square well": {
         "func": lambda x: finite_square_well(x, width=6.0, depth=50.0),
-        "description": "Finite depth well — bound & scattering states",
+        "description": "Finite depth well — bound & scattering states (smooth edges)",
         "x_range": (-15, 15),
         "default_x0": 0.0,
         "default_k0": 0.0,
@@ -110,8 +134,8 @@ POTENTIALS = {
     },
     "Potential barrier (tunneling)": {
         "func": lambda x: potential_barrier(x, width=1.0, height=20.0),
-        "description": "Rectangular barrier — quantum tunneling demonstration",
-        "x_range": (-15, 15),
+        "description": "Rectangular barrier — quantum tunneling (smooth edges)",
+        "x_range": (-25, 25),
         "default_x0": -5.0,
         "default_k0": 4.0,
         "default_sigma": 1.0,
@@ -126,8 +150,8 @@ POTENTIALS = {
     },
     "Step potential": {
         "func": lambda x: step_potential(x, height=15.0),
-        "description": "V = V₀ for x > 0 — partial reflection & transmission",
-        "x_range": (-20, 20),
+        "description": "V ≈ V₀ for x > 0 — partial reflection & transmission (smooth edge)",
+        "x_range": (-50, 50),
         "default_x0": -8.0,
         "default_k0": 4.0,
         "default_sigma": 1.5,
