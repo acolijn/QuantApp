@@ -4,6 +4,7 @@ import numpy as np
 import pytest
 
 from quantapp.solver import QuantumSystem
+from quantapp.potentials import infinite_square_well
 
 
 class TestQuantumSystemBasics:
@@ -71,3 +72,47 @@ class TestEigenstates:
         # Check orthonormality
         overlap = states.T @ states * qs.dx
         np.testing.assert_allclose(overlap, np.eye(4), atol=0.01)
+
+
+class TestDSTPropagator:
+    """Tests for the DST-based propagator used with hard-wall potentials."""
+
+    def _make_infinite_well_system(self, N=512, width=10.0):
+        qs = QuantumSystem(x_min=-10, x_max=10, N=N)
+        qs.set_potential(lambda x: infinite_square_well(x, width=width))
+        return qs
+
+    def test_dst_activated(self):
+        """DST propagator should be activated for the infinite well."""
+        qs = self._make_infinite_well_system()
+        assert hasattr(qs, '_use_dst') and qs._use_dst
+
+    def test_norm_preserved_infinite_well(self):
+        qs = self._make_infinite_well_system()
+        qs.set_gaussian_wavepacket(x0=0, sigma=1.0, k0=3.0)
+        qs.evolve(total_time=5.0, dt=0.01)
+        assert abs(qs.norm() - 1.0) < 1e-8
+
+    def test_energy_conserved_infinite_well(self):
+        """⟨E⟩ should be conserved to high precision with the DST propagator."""
+        qs = self._make_infinite_well_system()
+        qs.set_gaussian_wavepacket(x0=0, sigma=1.0, k0=3.0)
+        E0 = qs.expectation_energy()
+        qs.evolve(total_time=5.0, dt=0.01)
+        E_final = qs.expectation_energy()
+        # With DST this should be conserved to ~1e-6 or better
+        assert abs(E_final - E0) / abs(E0) < 1e-4, (
+            f"Energy drifted: {E0:.6f} → {E_final:.6f} "
+            f"(relative: {abs(E_final - E0) / abs(E0):.2e})"
+        )
+
+    def test_energy_conserved_long_run(self):
+        """Even over a long simulation, energy should stay stable."""
+        qs = self._make_infinite_well_system()
+        qs.set_gaussian_wavepacket(x0=-2.0, sigma=0.8, k0=0.0)
+        E0 = qs.expectation_energy()
+        qs.evolve(total_time=20.0, dt=0.01)
+        E_final = qs.expectation_energy()
+        assert abs(E_final - E0) / abs(E0) < 1e-3, (
+            f"Energy drifted over long run: {E0:.6f} → {E_final:.6f}"
+        )

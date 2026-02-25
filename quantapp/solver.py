@@ -19,6 +19,7 @@ We work in natural units where ħ = 1, m = 1 (adjustable).
 """
 
 import numpy as np
+from scipy.fft import dst, idst
 from scipy.linalg import eigh_tridiagonal
 
 
@@ -57,8 +58,11 @@ class QuantumSystem:
         """Create a mask that forces ψ=0 where V > threshold.
 
         Enforces Dirichlet boundary conditions for infinite wells.
+        If the interior region is contiguous, sets up a DST-based
+        kinetic propagator that naturally enforces ψ=0 at the walls.
         """
         self.hard_wall_mask = self.V < wall_threshold
+        self._setup_dst_propagator()
 
     # ── State initialisation ───────────────────────────────────────────
 
@@ -131,35 +135,102 @@ class QuantumSystem:
 
         return energies, states
 
+    # ── DST propagator setup ────────────────────────────────────────────
+
+    def _setup_dst_propagator(self):
+        """Set up a DST-based kinetic propagator for hard-wall potentials.
+
+        The Discrete Sine Transform naturally enforces ψ=0 at the walls
+        (Dirichlet BCs), eliminating the amplitude leakage that occurs
+        with the FFT's periodic BCs.  This preserves both norm and energy
+        to machine precision.
+
+        Requires the interior region (V < threshold) to be contiguous.
+        Falls back to FFT with simple masking otherwise.
+        """
+        interior_idx = np.where(self.hard_wall_mask)[0]
+        if len(interior_idx) < 2:
+            self._use_dst = False
+            return
+
+        start, end = interior_idx[0], interior_idx[-1] + 1  # exclusive end
+
+        # Interior must be contiguous for DST
+        if end - start != len(interior_idx):
+            self._use_dst = False
+            return
+
+        self._use_dst = True
+        self._interior_slice = slice(start, end)
+        N_int = end - start
+
+        # The DST-I assumes ψ=0 at positions one grid spacing outside
+        # the data, so the effective well width is (N_int + 1) * dx.
+        L_well = (N_int + 1) * self.dx
+        n_modes = np.arange(1, N_int + 1)
+        self._dst_kinetic = (
+            (self.hbar ** 2 * (n_modes * np.pi / L_well) ** 2)
+            / (2 * self.mass)
+        )
+
     # ── Time evolution ─────────────────────────────────────────────────
 
     def step(self, dt):
-        """Advance the wavefunction by one time step dt using split-operator FFT.
+        """Advance ψ by one time step dt.
 
-        ψ(t+dt) = e^{-iVdt/2ħ} · FFT⁻¹[ e^{-iTdt/ħ} · FFT[ e^{-iVdt/2ħ} ψ(t) ] ]
+        Automatically selects the DST-based kinetic propagator for
+        hard-wall potentials, or the standard FFT propagator otherwise.
         """
+        if getattr(self, '_use_dst', False):
+            self._step_dst(dt)
+        else:
+            self._step_fft(dt)
+        self.time += dt
+
+    def _step_fft(self, dt):
+        """Split-operator FFT step (for open / periodic systems)."""
         V_eff = np.clip(self.V, -1e4, 1e4)
 
-        # Half-step potential
         self.psi *= np.exp(-1j * V_eff * dt / (2 * self.hbar))
 
-        # Full step kinetic (momentum space)
         psi_k = np.fft.fft(self.psi)
         psi_k *= np.exp(-1j * self.kinetic_energy_k * dt / self.hbar)
         self.psi = np.fft.ifft(psi_k)
 
-        # Half-step potential
         self.psi *= np.exp(-1j * V_eff * dt / (2 * self.hbar))
 
-        # Enforce hard walls with norm preservation
+        # For hard walls without a contiguous interior (no DST),
+        # apply the mask but do NOT renormalise — renormalisation
+        # pumps energy into the system, causing the drift.
         if hasattr(self, 'hard_wall_mask'):
-            norm_before = np.sum(np.abs(self.psi) ** 2) * self.dx
             self.psi *= self.hard_wall_mask
-            norm_after = np.sum(np.abs(self.psi) ** 2) * self.dx
-            if norm_after > 1e-15:
-                self.psi *= np.sqrt(norm_before / norm_after)
 
-        self.time += dt
+    def _step_dst(self, dt):
+        """Split-operator DST step (for hard-wall bounded systems).
+
+        Uses Discrete Sine Transform (type I) for the kinetic step.
+        The DST basis functions are sin(nπx/L) which are exactly zero
+        at the walls, so there is no amplitude leakage and both norm
+        and energy are conserved to machine precision.
+        """
+        sl = self._interior_slice
+        V_int = self.V[sl]
+
+        # Half-step potential (interior only)
+        self.psi[sl] *= np.exp(-1j * V_int * dt / (2 * self.hbar))
+
+        # Full step kinetic via DST-I
+        psi_int = self.psi[sl]
+        psi_k = dst(psi_int.real, type=1) + 1j * dst(psi_int.imag, type=1)
+        psi_k *= np.exp(-1j * self._dst_kinetic * dt / self.hbar)
+        self.psi[sl] = idst(psi_k.real, type=1) + 1j * idst(psi_k.imag, type=1)
+
+        # Half-step potential
+        self.psi[sl] *= np.exp(-1j * V_int * dt / (2 * self.hbar))
+
+        # Ensure zero outside walls (should already be, but be safe)
+        self.psi[:sl.start] = 0
+        self.psi[sl.stop:] = 0
 
     def evolve(self, total_time, dt=0.01):
         """Evolve the system for a given total time."""
@@ -187,14 +258,48 @@ class QuantumSystem:
 
     def expectation_p(self):
         """⟨p⟩ computed in momentum space."""
+        if getattr(self, '_use_dst', False):
+            return self._expectation_p_dst()
         psi_k = np.fft.fft(self.psi) * self.dx
         return np.real(np.sum(np.conj(psi_k) * self.hbar * self.k * psi_k) * self.dk / (2 * np.pi))
 
+    def _expectation_p_dst(self):
+        """⟨p⟩ via DST — vanishes by symmetry of sin basis, but compute anyway."""
+        # In the DST basis, p is off-diagonal; compute via finite differences
+        psi_int = self.psi[self._interior_slice]
+        dpsi = np.gradient(psi_int, self.dx)
+        return np.real(-1j * self.hbar * np.sum(np.conj(psi_int) * dpsi) * self.dx)
+
     def expectation_energy(self):
-        """⟨E⟩ = ⟨T⟩ + ⟨V⟩."""
+        """⟨E⟩ = ⟨T⟩ + ⟨V⟩.
+
+        Uses the DST basis for ⟨T⟩ when hard walls are present,
+        avoiding Gibbs artifacts from the FFT at wall boundaries.
+        """
+        if getattr(self, '_use_dst', False):
+            return self._expectation_energy_dst()
         psi_k = np.fft.fft(self.psi) * self.dx
         T = np.real(np.sum(np.conj(psi_k) * self.kinetic_energy_k * psi_k) * self.dk / (2 * np.pi))
         V = np.real(np.sum(np.conj(self.psi) * self.V * self.psi) * self.dx)
+        return T + V
+
+    def _expectation_energy_dst(self):
+        """⟨E⟩ via DST for hard-wall systems.
+
+        DST Parseval relation: Σ_n |ψ_n|² = Σ_k |ψ̃_k|² / (2(N+1))
+        so ⟨T⟩ = [dx / (2(N+1))] Σ_k T_k |ψ̃_k|²
+        """
+        sl = self._interior_slice
+        psi_int = self.psi[sl]
+        N_int = len(psi_int)
+
+        # ⟨T⟩ in DST basis
+        psi_k = dst(psi_int.real, type=1) + 1j * dst(psi_int.imag, type=1)
+        T = np.real(np.sum(np.abs(psi_k) ** 2 * self._dst_kinetic)) * self.dx / (2 * (N_int + 1))
+
+        # ⟨V⟩ in position space (only interior contributes; V·ψ = 0 at walls)
+        V = np.real(np.sum(np.conj(psi_int) * self.V[sl] * psi_int)) * self.dx
+
         return T + V
 
     def uncertainty_x(self):

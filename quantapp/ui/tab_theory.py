@@ -47,6 +47,17 @@ def render():
 - **Efficient**: $\mathcal{O}(N \log N)$ per time step via FFT
 - **Accurate**: Global error $\mathcal{O}(\Delta t^2)$
 
+### Hard-wall potentials: DST propagator
+
+The standard FFT assumes **periodic boundary conditions**, which causes amplitude
+to leak through infinite potential walls. For potentials with hard walls (e.g. the
+infinite square well), we use a **Discrete Sine Transform (DST)** for the kinetic
+step instead. The DST basis functions $\sin(n\pi x/L)$ are exactly zero at the
+walls, naturally enforcing Dirichlet boundary conditions $\psi = 0$.
+
+This eliminates leakage entirely and conserves both **norm** and **energy** to
+machine precision — no artificial renormalization needed.
+
 ---
 
 ### Physics demonstrations
