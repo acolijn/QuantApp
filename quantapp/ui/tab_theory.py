@@ -120,6 +120,7 @@ barrier shapes.
 | **Barrier** | Transmission and reflection, tunneling probability |
 | **Morse potential** | Anharmonic molecular vibrations |
 | **Step potential** | Partial reflection at energy boundaries |
+| **Periodic lattice** | Energy bands, band gaps, Bloch waves |
 
 ---
 *We use natural units where $\hbar = 1$ and $m = 1$.*

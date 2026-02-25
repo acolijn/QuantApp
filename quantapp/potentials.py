@@ -88,6 +88,26 @@ def step_potential(x, height=15.0, steepness=DEFAULT_STEEPNESS):
     return height * smooth_step(x, 0.0, steepness)
 
 
+def periodic_potential(x, depth=5.0, period=3.0):
+    """Cosine lattice: V(x) = depth · [1 − cos(2πx/a)] / 2.
+
+    Produces a periodic array of wells with spacing *period* (= lattice
+    constant *a*).  The potential ranges from 0 (at the well minima) to
+    *depth* (at the maxima).  Ideal for demonstrating energy band
+    structure and Bloch's theorem — the FFT's periodic boundary
+    conditions are the *correct* BCs for this potential.
+
+    Parameters
+    ----------
+    x : np.ndarray
+    depth : float  (default 5.0)
+        Peak-to-trough amplitude.
+    period : float  (default 3.0)
+        Lattice constant *a*.
+    """
+    return depth * (1.0 - np.cos(2 * np.pi * x / period)) / 2.0
+
+
 # ── Registry ───────────────────────────────────────────────────────────
 # Each entry carries: func, description, x_range, and wavepacket defaults.
 
@@ -155,5 +175,13 @@ POTENTIALS = {
         "default_x0": -8.0,
         "default_k0": 4.0,
         "default_sigma": 1.5,
+    },
+    "Periodic lattice": {
+        "func": lambda x: periodic_potential(x, depth=5.0, period=3.0),
+        "description": "Cosine lattice V = V₀[1−cos(2πx/a)]/2 — energy bands & Bloch waves",
+        "x_range": (-15, 15),
+        "default_x0": 0.0,
+        "default_k0": 0.0,
+        "default_sigma": 2.0,
     },
 }

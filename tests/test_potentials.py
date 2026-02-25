@@ -12,6 +12,7 @@ from quantapp.potentials import (
     morse_potential,
     finite_square_well,
     step_potential,
+    periodic_potential,
     smooth_step,
     smooth_rect,
 )
@@ -48,6 +49,28 @@ class TestPotentialFunctions:
         x = np.linspace(-10, 10, 1000)
         V = morse_potential(x, D=10.0, a=0.5, x0=0.0)
         assert abs(V[np.argmin(np.abs(x))]) < 0.01  # min near x0
+
+    def test_periodic_potential_range(self):
+        """Periodic potential oscillates between 0 and depth."""
+        x = np.linspace(-15, 15, 10001)
+        V = periodic_potential(x, depth=5.0, period=3.0)
+        assert np.min(V) >= -1e-10  # never negative
+        assert abs(np.max(V) - 5.0) < 0.01  # peak = depth
+        assert abs(np.min(V)) < 0.01  # trough = 0
+
+    def test_periodic_potential_periodicity(self):
+        """V(x + a) == V(x) for lattice constant a."""
+        a = 3.0
+        x = np.linspace(0, a, 500, endpoint=False)
+        V1 = periodic_potential(x, depth=5.0, period=a)
+        V2 = periodic_potential(x + a, depth=5.0, period=a)
+        np.testing.assert_allclose(V1, V2, atol=1e-12)
+
+    def test_periodic_potential_symmetric(self):
+        """V(x) == V(-x) (even function)."""
+        x = np.linspace(-15, 15, 1001)
+        V = periodic_potential(x, depth=5.0, period=3.0)
+        np.testing.assert_allclose(V, V[::-1], atol=1e-10)
 
 
 class TestSmoothEdges:
