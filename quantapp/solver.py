@@ -207,7 +207,7 @@ class QuantumSystem:
             H[0, self.N - 1] = -coeff
             H[self.N - 1, 0] = -coeff
 
-            energies, states = eigsh(H, k=n_states, which='SM')
+            energies, states = eigsh(H, k=n_states, which='SA')
             # eigsh doesn't guarantee sorted order
             order = np.argsort(energies)
             energies = energies[order]
