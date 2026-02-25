@@ -151,6 +151,7 @@ POTENTIALS = {
         "default_x0": -2.0,
         "default_k0": 0.0,
         "default_sigma": 0.7,
+        "periodic": True,
     },
     "Potential barrier (tunneling)": {
         "func": lambda x: potential_barrier(x, width=1.0, height=20.0),
