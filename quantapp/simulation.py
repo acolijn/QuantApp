@@ -17,8 +17,9 @@ from quantapp.potentials import POTENTIALS
 @st.cache_data
 def compute_eigenstates_cached(potential_name, x_min, x_max, N, n_eigen=10):
     """Compute and cache eigenstates for the given potential."""
+    pot_info = POTENTIALS[potential_name]
     qs = QuantumSystem(x_min=x_min, x_max=x_max, N=N)
-    qs.set_potential(POTENTIALS[potential_name]["func"])
+    qs.set_potential(pot_info["func"], periodic=pot_info.get("periodic", False))
     try:
         energies, states = qs.compute_eigenstates(n_states=n_eigen)
     except Exception:
@@ -55,8 +56,9 @@ def initialize_wavefunction(qs, init_mode, eigenstates, *,
 def create_quantum_system(potential_name, x_min, x_max, N, init_mode,
                           eigenstates, **init_kwargs):
     """Build a QuantumSystem and initialise its wavefunction."""
+    pot_info = POTENTIALS[potential_name]
     qs = QuantumSystem(x_min=x_min, x_max=x_max, N=N)
-    qs.set_potential(POTENTIALS[potential_name]["func"])
+    qs.set_potential(pot_info["func"], periodic=pot_info.get("periodic", False))
     initialize_wavefunction(qs, init_mode, eigenstates, **init_kwargs)
     return qs
 

@@ -22,7 +22,7 @@ def render(cfg, x_grid, eigenenergies, eigenstates):
     eigenstates   — matrix of eigenvectors
     """
     st.subheader(f"Energy eigenstates — {cfg['potential_name']}")
-    n_show = st.slider("Number of eigenstates to display", 1, 12, 5, key="n_eigen_show")
+    n_show = st.slider("Number of eigenstates to display", 1, 25, 5, key="n_eigen_show")
 
     if eigenstates.size == 0 or eigenstates.shape[1] < n_show:
         st.warning("Could not compute eigenstates for this potential. "

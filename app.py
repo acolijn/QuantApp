@@ -34,7 +34,7 @@ Watch wavepackets evolve in real time under different potentials using the
 cfg = render_sidebar()
 
 x_grid, V_grid, eigenenergies, eigenstates = compute_eigenstates_cached(
-    cfg["potential_name"], cfg["x_min"], cfg["x_max"], cfg["N"], n_eigen=16,
+    cfg["potential_name"], cfg["x_min"], cfg["x_max"], cfg["N"], n_eigen=25,
 )
 
 stride = max(1, cfg["N"] // 300)

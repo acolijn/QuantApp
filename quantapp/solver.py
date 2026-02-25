@@ -21,6 +21,8 @@ We work in natural units where ħ = 1, m = 1 (adjustable).
 import numpy as np
 from scipy.fft import dst, idst
 from scipy.linalg import eigh_tridiagonal
+from scipy.sparse import diags
+from scipy.sparse.linalg import eigsh
 
 
 class QuantumSystem:
@@ -99,9 +101,19 @@ class QuantumSystem:
 
         return W
 
-    def set_potential(self, potential_func):
-        """Set the potential V(x)."""
+    def set_potential(self, potential_func, periodic=False):
+        """Set the potential V(x).
+
+        Parameters
+        ----------
+        potential_func : callable  x → V(x)
+        periodic : bool
+            If True, eigenstates are computed with periodic boundary
+            conditions (wrap-around coupling between first/last grid
+            points).  Appropriate for lattice / Bloch-wave problems.
+        """
         self.V = potential_func(self.x)
+        self._periodic = periodic
         if np.any(self.V > 1e4):
             self.set_hard_wall_mask(wall_threshold=1e4)
 
@@ -172,15 +184,43 @@ class QuantumSystem:
     def compute_eigenstates(self, n_states=10):
         """Compute the lowest n energy eigenstates using finite differences.
 
+        Uses periodic boundary conditions when the potential was set with
+        ``periodic=True`` (wrap-around coupling between first and last
+        grid points).  Otherwise uses the default Dirichlet BCs.
+
         Returns (energies, eigenstates) where eigenstates[:,i] is the i-th state.
         """
-        coeff = self.hbar ** 2 / (2 * self.mass * self.dx ** 2)
-        diagonal = 2 * coeff + self.V
-        off_diagonal = -coeff * np.ones(self.N - 1)
-
         n_states = min(n_states, self.N - 2)
-        energies, states = eigh_tridiagonal(diagonal, off_diagonal,
-                                             select='i', select_range=(0, n_states - 1))
+        coeff = self.hbar ** 2 / (2 * self.mass * self.dx ** 2)
+
+        if getattr(self, '_periodic', False):
+            # Periodic (circulant) Hamiltonian — sparse eigensolver
+            diagonal = 2 * coeff + self.V
+            off_diag = -coeff * np.ones(self.N)
+            H = diags(
+                [off_diag[:-1], diagonal, off_diag[:-1]],
+                offsets=[-1, 0, 1],
+                shape=(self.N, self.N),
+                format='csc',
+            )
+            # Wrap-around coupling: H[0, N-1] and H[N-1, 0]
+            H[0, self.N - 1] = -coeff
+            H[self.N - 1, 0] = -coeff
+
+            energies, states = eigsh(H, k=n_states, which='SM')
+            # eigsh doesn't guarantee sorted order
+            order = np.argsort(energies)
+            energies = energies[order]
+            states = states[:, order]
+        else:
+            # Dirichlet BCs — fast tridiagonal solver
+            diagonal = 2 * coeff + self.V
+            off_diagonal = -coeff * np.ones(self.N - 1)
+            energies, states = eigh_tridiagonal(
+                diagonal, off_diagonal,
+                select='i', select_range=(0, n_states - 1),
+            )
+
         for i in range(states.shape[1]):
             states[:, i] /= np.sqrt(np.sum(states[:, i] ** 2) * self.dx)
 

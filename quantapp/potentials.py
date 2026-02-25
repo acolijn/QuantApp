@@ -183,5 +183,6 @@ POTENTIALS = {
         "default_x0": 0.0,
         "default_k0": 0.0,
         "default_sigma": 2.0,
+        "periodic": True,
     },
 }
