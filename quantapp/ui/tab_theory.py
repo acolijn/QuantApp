@@ -1,7 +1,7 @@
 """
 Tab 3 — Theory
 ===============
-Static informational content about the Split-Operator FFT method.
+Static informational content about the numerical methods and physics.
 """
 
 import streamlit as st
@@ -51,37 +51,60 @@ def render():
 
 The standard FFT assumes **periodic boundary conditions**, which causes amplitude
 to leak through infinite potential walls. For potentials with hard walls (e.g. the
-infinite square well), we use a **Discrete Sine Transform (DST)** for the kinetic
+infinite square well), we use a **Discrete Sine Transform (DST-I)** for the kinetic
 step instead. The DST basis functions $\sin(n\pi x/L)$ are exactly zero at the
 walls, naturally enforcing Dirichlet boundary conditions $\psi = 0$.
 
 This eliminates leakage entirely and conserves both **norm** and **energy** to
-machine precision — no artificial renormalization needed.
+machine precision (~$10^{-13}$) — no artificial renormalization needed.
 
-### Absorbing boundaries
+The DST-based energy expectation value uses the Parseval relation in the
+sine basis:
+
+$$\langle T \rangle = \frac{\Delta x}{2(N_\mathrm{int}+1)} \sum_k T_k |\tilde\psi_k|^2$$
+
+where $T_k = \hbar^2 (k\pi/L)^2 / 2m$ are the kinetic eigenvalues and
+$\tilde\psi_k$ are the DST coefficients.
+
+### Boundary handling for scattering potentials
 
 For scattering potentials (barrier, step, free particle), the wavepacket can
 travel toward the edges of the simulation grid. With the FFT's periodic
 boundaries, the wavepacket would "wrap around" to the other side, creating
-artificial high-$k$ modes whose energy grows as $k_\\text{max}^2 \\propto 1/\\Delta x^2$.
-This makes the simulation **catastrophically N-dependent**: the same physics
-gives different energies at different grid resolutions.
+artificial high-$k$ modes whose energy grows as $k_\text{max}^2 \propto 1/\Delta x^2$.
 
-We solve this with a **complex absorbing potential (CAP)** — a smooth imaginary
-potential $V_\\text{absorb} = -iW(x)$ that ramps up near the grid boundaries
-via a $\\sin^2$ profile. Outgoing waves are gently absorbed before they can
-wrap, giving **N-independent results** at any grid resolution.
+We handle this by using **wide simulation domains** (e.g. $x \in [-50, 50]$ for
+the barrier and step potentials) so that the wavepacket does not reach the
+grid boundaries during typical simulation times. This avoids the need for
+artificial boundary treatments that can interfere with the physical
+reflection and transmission amplitudes.
 
-Since probability is physically leaving the simulation domain, the norm $\\langle\\psi|\\psi\\rangle$
-may decrease over time for scattering setups. Energy is reported as the
-per-particle value $\\langle E \\rangle / \\langle\\psi|\\psi\\rangle$.
+As a safety measure, the expectation energy is always computed as a
+**per-particle value** $\langle E \rangle / \langle\psi|\psi\rangle$, which
+stays accurate even if small amounts of probability leak through the
+periodic boundaries.
+
+> **Note:** The solver also includes an optional complex absorbing potential
+> (CAP) infrastructure that can damp outgoing waves near the grid edges.
+> This is disabled by default to preserve the physical norm, but can be
+> enabled for specialised use cases where very long simulation times are
+> needed.
 
 ### Smooth potential edges
 
 Discontinuous potentials (e.g. square barrier, step) cause the Trotter splitting
-error to diverge because the commutator $[T, V]$ involves $\\nabla V$, which is
-infinite at a sharp edge. We replace them with smooth $\\tanh$ edges with a
-transition width of $\\sim$0.4 length units, reducing energy drift to $< 10^{-4}$.
+error to diverge because the commutator $[T, V]$ involves $\nabla V$, which is
+infinite at a sharp edge. We replace sharp discontinuities with smooth $\tanh$
+profiles:
+
+$$V_\text{step}(x) = \tfrac{1}{2}\bigl(1 + \tanh[s\,(x - x_\text{edge})]\bigr)$$
+
+with steepness $s = 5$, giving a transition width of $\sim$0.4 length units.
+This keeps the physics essentially unchanged while reducing energy drift to
+$< 10^{-4}$ relative.
+
+The `smooth_rect` helper combines two such steps to form the finite well and
+barrier shapes.
 
 ---
 
@@ -90,7 +113,7 @@ transition width of $\\sim$0.4 length units, reducing energy drift to $< 10^{-4}
 | Potential | Key concept |
 |-----------|-------------|
 | **Free particle** | Wavepacket spreading, group vs phase velocity |
-| **Infinite well** | Quantized energy levels, standing waves |
+| **Infinite well** | Quantized energy levels, standing waves (DST propagator) |
 | **Finite well** | Tunneling into classically forbidden regions |
 | **Harmonic oscillator** | Equally spaced levels, coherent states |
 | **Double well** | Quantum tunneling between wells |
