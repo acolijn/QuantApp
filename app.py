@@ -35,6 +35,7 @@ cfg = render_sidebar()
 
 x_grid, V_grid, eigenenergies, eigenstates = compute_eigenstates_cached(
     cfg["potential_name"], cfg["x_min"], cfg["x_max"], cfg["N"], n_eigen=25,
+    pot_kwargs=cfg["pot_kwargs"],
 )
 
 stride = max(1, cfg["N"] // 300)

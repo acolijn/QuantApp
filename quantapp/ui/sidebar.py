@@ -5,7 +5,7 @@ Renders all sidebar widgets and returns a config dict consumed by the tabs.
 """
 
 import streamlit as st
-from quantapp.potentials import POTENTIALS
+from quantapp.potentials import POTENTIALS, multi_well
 
 
 def render_sidebar():
@@ -28,6 +28,24 @@ def render_sidebar():
     pot_info = POTENTIALS[potential_name]
     st.sidebar.caption(pot_info["description"])
 
+    # ── Per-potential controls for Multi-well ──────────────────────────
+    # pot_kwargs is a hashable tuple that parameterises the potential.
+    # For most potentials it is empty; the simulation layer uses it to
+    # rebuild the correct V(x) and as a cache key.
+    pot_kwargs = ()
+    if potential_name == "Multi-well (band structure)":
+        st.sidebar.subheader("Multi-well parameters")
+        mw_n = st.sidebar.slider("Number of wells N", 1, 20, 5)
+        mw_w = st.sidebar.slider("Well width", 0.2, 5.0, 2.0, 0.1)
+        mw_d = st.sidebar.slider("Well depth", 1.0, 100.0, 10.0, 1.0)
+        mw_j = st.sidebar.slider("Position jitter", 0.0, 5.0, 0.0, 0.1,
+                                  help="Max random shift of each well from its lattice site. "
+                                       "Automatically clamped to prevent overlap.")
+        mw_seed = 42
+        if mw_j > 0:
+            mw_seed = st.sidebar.number_input("Random seed", 0, 9999, 42)
+        pot_kwargs = (mw_n, mw_w, mw_d, mw_j, int(mw_seed))
+
     # Reset wavepacket defaults when the potential changes
     if st.session_state.get("last_potential") != potential_name:
         st.session_state.last_potential = potential_name
@@ -37,6 +55,13 @@ def render_sidebar():
 
     x_min, x_max = pot_info["x_range"]
     N = st.sidebar.select_slider("Grid points", options=[256, 512, 1024, 2048], value=1024)
+
+    # For multi-well: round N up to a multiple of n_wells so the grid
+    # samples each well identically (avoids tiny asymmetry in eigenstates).
+    if potential_name == "Multi-well (band structure)" and pot_kwargs:
+        mw_n_wells = pot_kwargs[0]
+        if mw_n_wells > 1 and N % mw_n_wells != 0:
+            N = N + (mw_n_wells - N % mw_n_wells)
 
     # ── Initial wavepacket ────────────────────────────────────────────
     st.sidebar.header("🌊 Initial wavepacket")
@@ -106,6 +131,7 @@ def render_sidebar():
 
     return dict(
         potential_name=potential_name,
+        pot_kwargs=pot_kwargs,
         x_min=x_min, x_max=x_max, N=N,
         init_mode=init_mode,
         x0=x0, sigma=sigma, k0=k0,

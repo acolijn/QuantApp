@@ -13,6 +13,7 @@ from quantapp.potentials import (
     finite_square_well,
     step_potential,
     periodic_potential,
+    multi_well,
     smooth_step,
     smooth_rect,
 )
@@ -104,6 +105,75 @@ class TestSmoothEdges:
         for func in [finite_square_well, potential_barrier]:
             V = func(x)
             np.testing.assert_allclose(V, V[::-1], atol=1e-10)
+
+
+class TestMultiWell:
+    """Tests for the multi-well (band structure) potential."""
+
+    def test_equidistant_depth(self):
+        x = np.linspace(-20, 20, 4000)
+        V = multi_well(x, n_wells=5, well_width=1.0, depth=30.0)
+        # Minimum should be close to -depth
+        assert abs(np.min(V) - (-30.0)) < 1.0
+
+    def test_single_well_centered(self):
+        """One well on a periodic lattice sits at the interval midpoint."""
+        x = np.linspace(-20, 20, 4000)
+        V = multi_well(x, n_wells=1, well_width=2.0, depth=20.0)
+        assert abs(x[np.argmin(V)]) < 1.0
+
+    def test_n_wells_count(self):
+        """Count local minima -- should match n_wells for zero jitter."""
+        x = np.linspace(-20, 20, 4000)
+        for n in [3, 5, 8]:
+            V = multi_well(x, n_wells=n, well_width=1.0, depth=30.0, jitter=0.0)
+            below = V < -15.0
+            entries = np.sum(np.diff(below.astype(int)) == 1)
+            assert entries == n, f"Expected {n} wells, found {entries}"
+
+    def test_potential_non_positive(self):
+        x = np.linspace(-20, 20, 2000)
+        V = multi_well(x, n_wells=5, well_width=1.0, depth=30.0)
+        assert np.all(V <= 1e-10)
+
+    def test_jitter_reproducible(self):
+        x = np.linspace(-20, 20, 2000)
+        V1 = multi_well(x, n_wells=5, jitter=1.0, seed=99)
+        V2 = multi_well(x, n_wells=5, jitter=1.0, seed=99)
+        np.testing.assert_array_equal(V1, V2)
+
+    def test_jitter_different_seeds(self):
+        x = np.linspace(-20, 20, 2000)
+        V1 = multi_well(x, n_wells=5, jitter=1.0, seed=1)
+        V2 = multi_well(x, n_wells=5, jitter=1.0, seed=2)
+        assert not np.allclose(V1, V2)
+
+    def test_jitter_no_overlap(self):
+        """Even with huge requested jitter, wells must not overlap."""
+        x = np.linspace(-20, 20, 4000)
+        V = multi_well(x, n_wells=8, well_width=2.0, depth=30.0,
+                        jitter=100.0, seed=7)  # absurd jitter clamped
+        # Depth should still be ~-30, not deeper (no stacking)
+        assert np.min(V) > -31.0
+
+    def test_zero_jitter_translational_symmetry(self):
+        """With zero jitter the potential is exactly periodic over one cell."""
+        n_wells = 5
+        N = 4000  # divisible by n_wells
+        x = np.linspace(-20, 20, N, endpoint=False)
+        V = multi_well(x, n_wells=n_wells, well_width=1.0, depth=30.0, jitter=0.0)
+        cell = N // n_wells
+        # Each cell must be identical (exact translational symmetry)
+        for i in range(1, n_wells):
+            np.testing.assert_allclose(V[:cell], V[i * cell:(i + 1) * cell],
+                                       atol=1e-10)
+
+    def test_periodic_continuity(self):
+        """Potential at left edge should match potential at right edge (periodic)."""
+        x = np.linspace(-20, 20, 4000, endpoint=False)
+        V = multi_well(x, n_wells=5, well_width=1.0, depth=30.0, jitter=0.0)
+        # With periodic placement, V[0] should be close to V[-1]
+        assert abs(V[0] - V[-1]) < 0.5
 
 
 class TestPotentialRegistry:

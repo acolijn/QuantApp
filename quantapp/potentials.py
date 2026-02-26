@@ -108,6 +108,75 @@ def periodic_potential(x, depth=5.0, period=3.0):
     return depth * (1.0 - np.cos(2 * np.pi * x / period)) / 2.0
 
 
+def multi_well(x, n_wells=5, well_width=1.0, depth=30.0,
+               jitter=0.0, seed=42, steepness=DEFAULT_STEEPNESS):
+    """N rectangular wells on a periodic lattice, with optional position jitter.
+
+    Creates *n_wells* negative rectangular wells on a periodic grid with
+    spacing L/n_wells, where L is the total interval length.  Because the
+    grid uses periodic boundary conditions the spacing wraps around: the
+    gap from the last well through the boundary back to the first well
+    equals the gap between any other adjacent pair.
+
+    Each well centre can be randomly displaced by up to +/- *jitter* from
+    its lattice site (useful for modelling disorder in liquid noble gases).
+    An overlap guard clamps the effective jitter so adjacent well edges
+    never touch.
+
+    The potential is constructed to be *exactly* periodic even with smooth
+    tanh edges, by folding each point's distance to the well centre into
+    the range [-spacing/2, spacing/2) before evaluating the smooth window.
+
+    Parameters
+    ----------
+    x : np.ndarray
+        Spatial grid (assumed periodic: x[0] and x[-1]+dx wrap around).
+    n_wells : int  (default 5)
+        Number of wells.
+    well_width : float  (default 1.0)
+        Full width of each rectangular well.
+    depth : float  (default 30.0)
+        Depth of each well (potential is -depth inside).
+    jitter : float  (default 0.0)
+        Maximum random displacement of each well centre from its
+        lattice site.  Set to 0 for a perfect periodic lattice.
+    seed : int  (default 42)
+        Random seed for reproducibility (only matters when jitter > 0).
+    steepness : float
+        Edge steepness for the smooth rectangular windows.
+
+    Returns
+    -------
+    np.ndarray
+        Potential array V(x) with values in [-depth, 0].
+    """
+    x_lo = float(x[0])
+    dx = float(x[1] - x[0]) if len(x) > 1 else 1.0
+    L = len(x) * dx  # full periodic domain length (N·dx = b − a)
+
+    # Periodic lattice spacing
+    spacing = L / n_wells
+
+    # Centres placed so that the wrap-around gap equals the inter-well gap
+    centers = x_lo + (np.arange(n_wells) + 0.5) * spacing
+
+    # Apply jitter with overlap guard (respects periodicity)
+    if jitter > 0 and n_wells > 1:
+        max_jitter = (spacing - well_width) / 2  # keeps edges from touching
+        safe_jitter = max(0.0, min(jitter, max_jitter))
+        rng = np.random.default_rng(int(seed))
+        centers = centers + rng.uniform(-safe_jitter, safe_jitter, size=n_wells)
+
+    V = np.zeros_like(x)
+    hw = well_width / 2
+    for c in centers:
+        # Fold distance to centre into [-L/2, L/2) so every well sees the
+        # same local coordinate — guarantees exact periodicity.
+        dx = (x - c + L / 2) % L - L / 2
+        V -= depth * smooth_rect(dx, 0.0, hw, steepness)
+    return V
+
+
 # ── Registry ───────────────────────────────────────────────────────────
 # Each entry carries: func, description, x_range, and wavepacket defaults.
 
@@ -190,5 +259,16 @@ POTENTIALS = {
         "default_k0": 0.0,
         "default_sigma": 2.0,
         "periodic": True,
+    },
+    "Multi-well (band structure)": {
+        "func": lambda x: multi_well(x, n_wells=5, well_width=2.0, depth=10.0,
+                                     jitter=0.0, seed=42),
+        "description": "N rectangular wells with tunable jitter \u2014 band structure & disorder",
+        "x_range": (-15, 15),
+        "default_x0": 0.0,
+        "default_k0": 0.0,
+        "default_sigma": 1.5,
+        "periodic": True,
+        "has_custom_ui": True,
     },
 }

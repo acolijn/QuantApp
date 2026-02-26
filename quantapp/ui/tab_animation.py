@@ -78,6 +78,7 @@ def _render_animation(cfg, plot_placeholder, info_box,
             x0, sigma, k0, eigen_n, n1, n2, ratio,
             cfg["dt"], cfg["steps_per_frame"], cfg["n_frames"],
             cfg["N"], cfg["x_min"], cfg["x_max"], stride,
+            pot_kwargs=cfg["pot_kwargs"],
         )
 
     # Build initial traces
@@ -164,6 +165,7 @@ def _render_static(cfg, plot_placeholder, info_box,
     qs0 = create_quantum_system(
         cfg["potential_name"], cfg["x_min"], cfg["x_max"], cfg["N"],
         cfg["init_mode"], eigenstates,
+        pot_kwargs=cfg["pot_kwargs"],
         x0=x0, sigma=sigma, k0=k0,
         eigen_n=eigen_n, n1=n1, n2=n2, ratio=ratio,
     )

@@ -9,17 +9,35 @@ import numpy as np
 import streamlit as st
 
 from quantapp.solver import QuantumSystem
-from quantapp.potentials import POTENTIALS
+from quantapp.potentials import POTENTIALS, multi_well
 
 
 # ── Eigenstate caching ─────────────────────────────────────────────────
 
+# Bump _CACHE_VERSION when potential code changes to invalidate stale
+# Streamlit caches (st.cache_data does not track transitive dependencies).
+_CACHE_VERSION = 4
+
+
+def _resolve_potential_func(potential_name, pot_kwargs=()):
+    """Return the potential callable, applying pot_kwargs for Multi-well."""
+    pot_info = POTENTIALS[potential_name]
+    if potential_name == "Multi-well (band structure)" and pot_kwargs:
+        n_wells, well_width, depth, jitter, seed = pot_kwargs
+        return lambda x: multi_well(x, n_wells=n_wells, well_width=well_width,
+                                    depth=depth, jitter=jitter, seed=seed)
+    return pot_info["func"]
+
+
 @st.cache_data
-def compute_eigenstates_cached(potential_name, x_min, x_max, N, n_eigen=10):
+def compute_eigenstates_cached(potential_name, x_min, x_max, N,
+                               n_eigen=10, pot_kwargs=(),
+                               _v=_CACHE_VERSION):
     """Compute and cache eigenstates for the given potential."""
     pot_info = POTENTIALS[potential_name]
+    func = _resolve_potential_func(potential_name, pot_kwargs)
     qs = QuantumSystem(x_min=x_min, x_max=x_max, N=N)
-    qs.set_potential(pot_info["func"], periodic=pot_info.get("periodic", False))
+    qs.set_potential(func, periodic=pot_info.get("periodic", False))
     try:
         energies, states = qs.compute_eigenstates(n_states=n_eigen)
     except Exception:
@@ -54,11 +72,12 @@ def initialize_wavefunction(qs, init_mode, eigenstates, *,
 
 
 def create_quantum_system(potential_name, x_min, x_max, N, init_mode,
-                          eigenstates, **init_kwargs):
+                          eigenstates, pot_kwargs=(), **init_kwargs):
     """Build a QuantumSystem and initialise its wavefunction."""
     pot_info = POTENTIALS[potential_name]
+    func = _resolve_potential_func(potential_name, pot_kwargs)
     qs = QuantumSystem(x_min=x_min, x_max=x_max, N=N)
-    qs.set_potential(pot_info["func"], periodic=pot_info.get("periodic", False))
+    qs.set_potential(func, periodic=pot_info.get("periodic", False))
     initialize_wavefunction(qs, init_mode, eigenstates, **init_kwargs)
     return qs
 
@@ -70,7 +89,9 @@ def precompute_animation(potential_name, init_mode_key,
                          x0_v, sigma_v, k0_v,
                          eigen_n_v, n1_v, n2_v, ratio_v,
                          _dt, _steps_per_frame, _n_frames,
-                         _N, _x_min, _x_max, _stride):
+                         _N, _x_min, _x_max, _stride,
+                         pot_kwargs=(),
+                         _v=_CACHE_VERSION):
     """Pre-compute all animation frames (cached).
 
     Returns arrays: probs, re_parts, im_parts, times, energies,
@@ -78,9 +99,11 @@ def precompute_animation(potential_name, init_mode_key,
     """
     _, _, _, eigs = compute_eigenstates_cached(
         potential_name, _x_min, _x_max, _N, n_eigen=16,
+        pot_kwargs=pot_kwargs,
     )
     qs = create_quantum_system(
         potential_name, _x_min, _x_max, _N, init_mode_key, eigs,
+        pot_kwargs=pot_kwargs,
         x0=x0_v, sigma=sigma_v, k0=k0_v,
         eigen_n=eigen_n_v, n1=n1_v, n2=n2_v, ratio=ratio_v,
     )
