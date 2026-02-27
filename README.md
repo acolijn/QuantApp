@@ -11,9 +11,12 @@ equation in real time using the **Split-Operator FFT** method.
 
 ## Features
 
-- **8 built-in potentials** — free particle, infinite/finite square well,
+- **10 built-in potentials** — free particle, infinite/finite square well,
   harmonic oscillator, double well, tunneling barrier, Morse potential,
-  step potential.
+  step potential, periodic lattice, multi-well (band structure).
+- **Adjustable potential parameters** — each potential exposes its own
+  physical parameters (depth, width, separation, …) via the sidebar.
+- **Adjustable spatial domain** — x_min and x_max can be tuned per potential.
 - **Three initialisation modes** — Gaussian wavepacket, energy eigenstates,
   superposition of two eigenstates.
 - **Animated time evolution** — pre-computed frames with Play / Pause /
@@ -213,7 +216,10 @@ can be enabled for specialised long-time simulations.
 
    ```python
    "My potential": {
-       "func": lambda x: my_potential(x, param=2.0),
+       "func": my_potential,
+       "params": [
+           {"name": "param", "label": "My param", "min": 0.1, "max": 10.0, "default": 2.0, "step": 0.1},
+       ],
        "description": "A custom potential — short description",
        "x_range": (-10, 10),
        "default_x0": 0.0,
@@ -234,7 +240,7 @@ The new potential will automatically appear in the sidebar dropdown.
 pytest -v
 ```
 
-Currently **29 tests** covering:
+Currently **41 tests** covering:
 
 - Grid setup and normalisation
 - Time evolution unitarity (norm and energy conservation)
