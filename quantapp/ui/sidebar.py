@@ -4,6 +4,7 @@ Sidebar controls
 Renders all sidebar widgets and returns a config dict consumed by the tabs.
 """
 
+import numpy as np
 import streamlit as st
 from quantapp.potentials import POTENTIALS
 
@@ -100,8 +101,20 @@ def render_sidebar():
         ratio = 0.5
 
         if init_mode == "Gaussian wavepacket":
+            # Ensure the stored x0 value is valid for the current slider
+            # bounds *before* Streamlit renders the widget.  We clamp to
+            # [x_min, x_max] and snap to the step grid so the slider
+            # never silently resets.
+            _step = 0.1
+            _x0_stored = st.session_state.get("x0")
+            if _x0_stored is not None:
+                _x0_fixed = float(np.clip(_x0_stored, x_min, x_max))
+                _x0_fixed = round(_x0_fixed / _step) * _step
+                st.session_state["x0"] = _x0_fixed
+
             c1, c2 = st.columns(2)
-            x0 = c1.slider("x₀ (center)", float(x_min), float(x_max), step=0.1, key="x0")
+            x0 = c1.slider("x₀ (center)", float(x_min), float(x_max),
+                            step=_step, key="x0")
             sigma = c2.slider("σ (width)", 0.1, 5.0, step=0.1, key="sigma")
             k0 = st.slider("k₀ (momentum)", -10.0, 10.0, step=0.1, key="k0")
         elif init_mode == "Energy eigenstate":
