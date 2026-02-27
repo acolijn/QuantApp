@@ -183,6 +183,7 @@ def multi_well(x, n_wells=5, well_width=1.0, depth=30.0,
 POTENTIALS = {
     "Free particle": {
         "func": free_particle,
+        "params": [],
         "description": "V(x) = 0 — Free propagation, wavepacket spreading",
         "x_range": (-40, 40),
         "default_x0": -5.0,
@@ -191,7 +192,10 @@ POTENTIALS = {
         "periodic": True,
     },
     "Infinite square well": {
-        "func": lambda x: infinite_square_well(x, width=10.0),
+        "func": infinite_square_well,
+        "params": [
+            {"name": "width", "label": "Well width", "min": 2.0, "max": 30.0, "default": 10.0, "step": 0.5},
+        ],
         "description": "Particle in a box — quantized energy levels",
         "x_range": (-10, 10),
         "default_x0": 0.0,
@@ -199,7 +203,11 @@ POTENTIALS = {
         "default_sigma": 1.0,
     },
     "Finite square well": {
-        "func": lambda x: finite_square_well(x, width=6.0, depth=50.0),
+        "func": finite_square_well,
+        "params": [
+            {"name": "width", "label": "Well width", "min": 1.0, "max": 20.0, "default": 6.0, "step": 0.5},
+            {"name": "depth", "label": "Well depth", "min": 5.0, "max": 200.0, "default": 50.0, "step": 5.0},
+        ],
         "description": "Finite depth well — bound & scattering states (smooth edges)",
         "x_range": (-15, 15),
         "default_x0": 0.0,
@@ -208,7 +216,10 @@ POTENTIALS = {
         "periodic": True,
     },
     "Harmonic oscillator": {
-        "func": lambda x: harmonic_oscillator(x, omega=1.0),
+        "func": harmonic_oscillator,
+        "params": [
+            {"name": "omega", "label": "Frequency ω", "min": 0.1, "max": 5.0, "default": 1.0, "step": 0.1},
+        ],
         "description": "V = ½mω²x² — Equally spaced energy levels",
         "x_range": (-10, 10),
         "default_x0": -3.0,
@@ -216,7 +227,11 @@ POTENTIALS = {
         "default_sigma": 0.5,
     },
     "Double well": {
-        "func": lambda x: double_well(x, separation=4.0, depth=10.0),
+        "func": double_well,
+        "params": [
+            {"name": "separation", "label": "Well separation", "min": 1.0, "max": 10.0, "default": 4.0, "step": 0.5},
+            {"name": "depth", "label": "Well depth", "min": 1.0, "max": 30.0, "default": 10.0, "step": 1.0},
+        ],
         "description": "Two symmetric wells — quantum tunneling between wells",
         "x_range": (-10, 10),
         "default_x0": -2.0,
@@ -225,7 +240,11 @@ POTENTIALS = {
         "periodic": True,
     },
     "Potential barrier (tunneling)": {
-        "func": lambda x: potential_barrier(x, width=1.0, height=20.0),
+        "func": potential_barrier,
+        "params": [
+            {"name": "width", "label": "Barrier width", "min": 0.1, "max": 5.0, "default": 1.0, "step": 0.1},
+            {"name": "height", "label": "Barrier height", "min": 1.0, "max": 100.0, "default": 20.0, "step": 1.0},
+        ],
         "description": "Rectangular barrier — quantum tunneling (smooth edges)",
         "x_range": (-50, 50),
         "default_x0": -5.0,
@@ -234,7 +253,12 @@ POTENTIALS = {
         "periodic": True,
     },
     "Morse potential": {
-        "func": lambda x: morse_potential(x, D=12.0, a=0.4, x0=-3.0),
+        "func": morse_potential,
+        "params": [
+            {"name": "D", "label": "Dissociation energy D", "min": 1.0, "max": 30.0, "default": 12.0, "step": 1.0},
+            {"name": "a", "label": "Width parameter a", "min": 0.1, "max": 2.0, "default": 0.4, "step": 0.05},
+            {"name": "x0", "label": "Equilibrium position x₀", "min": -10.0, "max": 10.0, "default": -3.0, "step": 0.5},
+        ],
         "description": "Anharmonic oscillator — models molecular vibrations",
         "x_range": (-15, 15),
         "default_x0": -3.0,
@@ -243,7 +267,10 @@ POTENTIALS = {
         "periodic": True,
     },
     "Step potential": {
-        "func": lambda x: step_potential(x, height=15.0),
+        "func": step_potential,
+        "params": [
+            {"name": "height", "label": "Step height", "min": 1.0, "max": 50.0, "default": 15.0, "step": 1.0},
+        ],
         "description": "V ≈ V₀ for x > 0 — partial reflection & transmission (smooth edge)",
         "x_range": (-50, 50),
         "default_x0": -8.0,
@@ -252,7 +279,11 @@ POTENTIALS = {
         "periodic": True,
     },
     "Periodic lattice": {
-        "func": lambda x: periodic_potential(x, depth=5.0, period=3.0),
+        "func": periodic_potential,
+        "params": [
+            {"name": "depth", "label": "Lattice depth", "min": 1.0, "max": 20.0, "default": 5.0, "step": 0.5},
+            {"name": "period", "label": "Lattice period", "min": 1.0, "max": 10.0, "default": 3.0, "step": 0.5},
+        ],
         "description": "Cosine lattice V = V₀[1−cos(2πx/a)]/2 — energy bands & Bloch waves",
         "x_range": (-15, 15),
         "default_x0": 0.0,
@@ -261,14 +292,22 @@ POTENTIALS = {
         "periodic": True,
     },
     "Multi-well (band structure)": {
-        "func": lambda x: multi_well(x, n_wells=5, well_width=2.0, depth=10.0,
-                                     jitter=0.0, seed=42),
+        "func": multi_well,
+        "params": [
+            {"name": "n_wells", "label": "Number of wells", "min": 1, "max": 20, "default": 5, "step": 1},
+            {"name": "well_width", "label": "Well width", "min": 0.2, "max": 5.0, "default": 2.0, "step": 0.1},
+            {"name": "depth", "label": "Well depth", "min": 1.0, "max": 100.0, "default": 10.0, "step": 1.0},
+            {"name": "jitter", "label": "Position jitter", "min": 0.0, "max": 5.0, "default": 0.0, "step": 0.1,
+             "help": "Max random shift of each well from its lattice site. "
+                     "Automatically clamped to prevent overlap."},
+            {"name": "seed", "label": "Random seed", "min": 0, "max": 9999, "default": 42, "step": 1,
+             "show_if": {"param": "jitter", "gt": 0}},
+        ],
         "description": "N rectangular wells with tunable jitter \u2014 band structure & disorder",
         "x_range": (-15, 15),
         "default_x0": 0.0,
         "default_k0": 0.0,
         "default_sigma": 1.5,
         "periodic": True,
-        "has_custom_ui": True,
     },
 }

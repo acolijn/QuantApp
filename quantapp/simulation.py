@@ -9,7 +9,7 @@ import numpy as np
 import streamlit as st
 
 from quantapp.solver import QuantumSystem
-from quantapp.potentials import POTENTIALS, multi_well
+from quantapp.potentials import POTENTIALS
 
 
 # ── Eigenstate caching ─────────────────────────────────────────────────
@@ -20,12 +20,17 @@ _CACHE_VERSION = 4
 
 
 def _resolve_potential_func(potential_name, pot_kwargs=()):
-    """Return the potential callable, applying pot_kwargs for Multi-well."""
+    """Return the potential callable, applying pot_kwargs for the given potential.
+
+    pot_kwargs is a tuple of (name, value) pairs produced by the sidebar.
+    When non-empty it is converted to keyword arguments for the raw
+    potential function.
+    """
     pot_info = POTENTIALS[potential_name]
-    if potential_name == "Multi-well (band structure)" and pot_kwargs:
-        n_wells, well_width, depth, jitter, seed = pot_kwargs
-        return lambda x: multi_well(x, n_wells=n_wells, well_width=well_width,
-                                    depth=depth, jitter=jitter, seed=seed)
+    kwargs = dict(pot_kwargs)
+    if kwargs:
+        func = pot_info["func"]
+        return lambda x: func(x, **kwargs)
     return pot_info["func"]
 
 

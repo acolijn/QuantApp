@@ -5,7 +5,7 @@ Renders all sidebar widgets and returns a config dict consumed by the tabs.
 """
 
 import streamlit as st
-from quantapp.potentials import POTENTIALS, multi_well
+from quantapp.potentials import POTENTIALS
 
 
 def render_sidebar():
@@ -28,23 +28,33 @@ def render_sidebar():
         pot_info = POTENTIALS[potential_name]
         st.caption(pot_info["description"])
 
-        # ── Per-potential controls for Multi-well ──────────────────────
-        # pot_kwargs is a hashable tuple that parameterises the potential.
-        # For most potentials it is empty; the simulation layer uses it to
-        # rebuild the correct V(x) and as a cache key.
-        pot_kwargs = ()
-        if potential_name == "Multi-well (band structure)":
-            st.subheader("Multi-well parameters")
-            mw_n = st.slider("Number of wells N", 1, 20, 5)
-            mw_w = st.slider("Well width", 0.2, 5.0, 2.0, 0.1)
-            mw_d = st.slider("Well depth", 1.0, 100.0, 10.0, 1.0)
-            mw_j = st.slider("Position jitter", 0.0, 5.0, 0.0, 0.1,
-                              help="Max random shift of each well from its lattice site. "
-                                   "Automatically clamped to prevent overlap.")
-            mw_seed = 42
-            if mw_j > 0:
-                mw_seed = st.number_input("Random seed", 0, 9999, 42)
-            pot_kwargs = (mw_n, mw_w, mw_d, mw_j, int(mw_seed))
+        # ── Per-potential parameter controls ───────────────────────────
+        # pot_kwargs is a hashable tuple of (name, value) pairs used as a
+        # cache key and passed to _resolve_potential_func.
+        params = pot_info.get("params", [])
+        param_values = {}
+        if params:
+            st.markdown("**Potential parameters**")
+            for p in params:
+                # Conditional visibility (e.g. seed only when jitter > 0)
+                show_if = p.get("show_if")
+                if show_if:
+                    ref_val = param_values.get(show_if["param"])
+                    if ref_val is None or not (ref_val > show_if.get("gt", float("-inf"))):
+                        continue
+
+                pkey = f"pot_{potential_name}_{p['name']}"
+                help_text = p.get("help")
+                if isinstance(p["default"], int) and isinstance(p["min"], int):
+                    val = st.slider(p["label"], int(p["min"]), int(p["max"]),
+                                    int(p["default"]), int(p["step"]),
+                                    help=help_text, key=pkey)
+                else:
+                    val = st.slider(p["label"], float(p["min"]), float(p["max"]),
+                                    float(p["default"]), float(p["step"]),
+                                    help=help_text, key=pkey)
+                param_values[p["name"]] = val
+        pot_kwargs = tuple(sorted(param_values.items()))
 
         # Reset wavepacket defaults when the potential changes
         if st.session_state.get("last_potential") != potential_name:
@@ -53,13 +63,26 @@ def render_sidebar():
             st.session_state.sigma = pot_info["default_sigma"]
             st.session_state.k0 = pot_info["default_k0"]
 
-        x_min, x_max = pot_info["x_range"]
+        # ── Spatial domain ─────────────────────────────────────────────
+        default_xmin, default_xmax = pot_info["x_range"]
+        st.markdown("**Spatial domain**")
+        c1, c2 = st.columns(2)
+        x_min = c1.number_input("x_min", min_value=-500.0, max_value=500.0,
+                                value=float(default_xmin), step=1.0,
+                                key=f"xrange_{potential_name}_min")
+        x_max = c2.number_input("x_max", min_value=-500.0, max_value=500.0,
+                                value=float(default_xmax), step=1.0,
+                                key=f"xrange_{potential_name}_max")
+        if x_min >= x_max:
+            st.error("x_min must be less than x_max")
+            x_min, x_max = float(default_xmin), float(default_xmax)
+
         N = st.select_slider("Grid points", options=[256, 512, 1024, 2048], value=1024)
 
         # For multi-well: round N up to a multiple of n_wells so the grid
         # samples each well identically (avoids tiny asymmetry in eigenstates).
-        if potential_name == "Multi-well (band structure)" and pot_kwargs:
-            mw_n_wells = pot_kwargs[0]
+        if potential_name == "Multi-well (band structure)":
+            mw_n_wells = param_values.get("n_wells", 1)
             if mw_n_wells > 1 and N % mw_n_wells != 0:
                 N = N + (mw_n_wells - N % mw_n_wells)
 
