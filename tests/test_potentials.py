@@ -52,12 +52,12 @@ class TestPotentialFunctions:
         assert abs(V[np.argmin(np.abs(x))]) < 0.01  # min near x0
 
     def test_periodic_potential_range(self):
-        """Periodic potential oscillates between 0 and depth."""
+        """Periodic potential oscillates between -depth and 0."""
         x = np.linspace(-15, 15, 10001)
         V = periodic_potential(x, depth=5.0, period=3.0)
-        assert np.min(V) >= -1e-10  # never negative
-        assert abs(np.max(V) - 5.0) < 0.01  # peak = depth
-        assert abs(np.min(V)) < 0.01  # trough = 0
+        assert np.max(V) <= 1e-10  # never positive
+        assert abs(np.min(V) - (-5.0)) < 0.01  # trough = -depth
+        assert abs(np.max(V)) < 0.01  # peak = 0
 
     def test_periodic_potential_periodicity(self):
         """V(x + a) == V(x) for lattice constant a."""

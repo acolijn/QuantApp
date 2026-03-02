@@ -89,11 +89,12 @@ def step_potential(x, height=15.0, steepness=DEFAULT_STEEPNESS):
 
 
 def periodic_potential(x, depth=5.0, period=3.0):
-    """Cosine lattice: V(x) = depth · [1 − cos(2πx/a)] / 2.
+    """Cosine lattice: V(x) = −depth · [1 − cos(2πx/a)] / 2.
 
     Produces a periodic array of wells with spacing *period* (= lattice
-    constant *a*).  The potential ranges from 0 (at the well minima) to
-    *depth* (at the maxima).  Ideal for demonstrating energy band
+    constant *a*).  The potential ranges from −depth (at the well minima)
+    to 0 (at the maxima), consistent with the sign convention used by
+    all other well potentials.  Ideal for demonstrating energy band
     structure and Bloch's theorem — the FFT's periodic boundary
     conditions are the *correct* BCs for this potential.
 
@@ -105,7 +106,7 @@ def periodic_potential(x, depth=5.0, period=3.0):
     period : float  (default 3.0)
         Lattice constant *a*.
     """
-    return depth * (1.0 - np.cos(2 * np.pi * x / period)) / 2.0
+    return -depth * (1.0 - np.cos(2 * np.pi * x / period)) / 2.0
 
 
 def multi_well(x, n_wells=5, well_width=1.0, depth=30.0,
