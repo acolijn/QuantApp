@@ -116,8 +116,8 @@ def precompute_animation(potential_name, init_mode_key,
     def snapshot():
         return dict(
             prob=np.abs(qs.psi[::_stride]) ** 2,
-            re=np.real(qs.psi[::_stride]),
-            im=np.imag(qs.psi[::_stride]),
+            re=np.real(qs.psi[::_stride]).copy(),
+            im=np.imag(qs.psi[::_stride]).copy(),
             time=qs.time,
             energy=qs.expectation_energy(),
             exp_x=qs.expectation_x(),
